@@ -6,7 +6,7 @@ contract MindToken is ERC20("MindToken", "MND") {
     address public immutable OWNER;
     constructor() {
         OWNER = msg.sender;
-        _mint(msg.sender, 10000000);
+        _mint(msg.sender, 100000000);
     }
 
     function decimals() public pure override returns (uint8) {

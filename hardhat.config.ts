@@ -26,15 +26,15 @@ module.exports = {
       sepolia: ETHERSCAN_API_KEY,
       "lisk-sepolia": "123",
     },
-  },
-  customChains: [
-    {
-      network: "lisk-sepolia",
-      chainId: 4202,
-      urls: {
-        apiURL: "https://sepolia-blockscout.lisk.com/api",
-        browserURL: "https://sepolia-blockscout.lisk.com",
+    customChains: [
+      {
+        network: "lisk-sepolia",
+        chainId: 4202,
+        urls: {
+          apiURL: "https://sepolia-blockscout.lisk.com/api",
+          browserURL: "https://sepolia-blockscout.lisk.com",
+        },
       },
-    },
-  ],
+    ],
+  },
 };

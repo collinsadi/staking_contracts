@@ -26,9 +26,11 @@ contract StakeMindToken {
     struct Stake {
         uint256 amount;
         uint256 timeStaked;
+        uint256 duration;
         address owner;
         uint256 id;
         bool liquidated;
+        uint256 reward;
     }
 
     // this is a mapping of a user's address to all the stakes they have on the platform
@@ -41,7 +43,7 @@ contract StakeMindToken {
     // which in this case is: 0x402d8DF98381c8dCd918B70532d78A8aDcC973Fa
 
     constructor() {
-        tokenAddress = 0x402d8DF98381c8dCd918B70532d78A8aDcC973Fa;
+        tokenAddress = 0xA02e9FeC84C5a1dA7AB98817E14191A714f9287D;
     }
 
     // this is a sanity check modifier that ensures that zero address is not being used to interact with our contract
@@ -60,9 +62,16 @@ contract StakeMindToken {
         uint256 indexed amountWithdrawn
     );
 
-    // this function handles the logic for letting a user stake a specified amount of the (MND) token
+    /// @notice This function allows a user to stake a specified amount of MND tokens for a specific duration
+    /// @param _amount The amount of tokens to stake
+    /// @param _duration The duration for which the user wants to stake their tokens in days (30, 60, 90)
 
-    function stake(uint256 _amount) external sanityCheck {
+    function stake(uint256 _amount, uint256 _duration) external sanityCheck {
+        require(
+            _duration == 30 || _duration == 60 || _duration == 90,
+            "Invalid staking duration"
+        );
+
         // we get the user's MND Balance
 
         uint256 _userMindTokenBalance = IERC20(tokenAddress).balanceOf(
@@ -78,6 +87,12 @@ contract StakeMindToken {
         // here we transfer the intended stake amount to the contract address
         // just so the contract can manage it and stake it for the user
 
+        uint256 allowance = IERC20(tokenAddress).allowance(
+            msg.sender,
+            address(this)
+        );
+        require(allowance >= _amount, "Insufficient Allowance");
+
         /*************************************
          *  BEFORE THIS FUNCTION WILL WORK   *
          * THE FRONTEND MUST HAVE INITIATED  *
@@ -87,7 +102,12 @@ contract StakeMindToken {
          *      'INSUFFICENT ALLOWANCE'      *
          *************************************/
 
-        IERC20(tokenAddress).transferFrom(msg.sender, address(this), _amount);
+        bool transferSuccess = IERC20(tokenAddress).transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
+        require(transferSuccess, "Token transfer failed");
 
         // we get the users stakes from storage
         // we are going to add the new staking to it
@@ -97,12 +117,17 @@ contract StakeMindToken {
         // we initialize the new staking
         // using the stake struct
 
+        // Calculate the reward based on time
+        uint256 reward = calculateReward(_amount, _duration);
+
         Stake memory newStake = Stake({
             amount: _amount,
             timeStaked: block.timestamp,
             owner: msg.sender,
             id: userStakes.length + 1,
-            liquidated: false
+            liquidated: false,
+            reward: reward,
+            duration: _duration * 1 days
         });
 
         //  her we push to the array containing the stakes of the user;
@@ -155,15 +180,32 @@ contract StakeMindToken {
 
         balances[msg.sender] -= stakeToWithdraw.amount;
 
-        // update the liquidated status
-
         stakeToWithdraw.liquidated = true;
 
-        // send the token to the user
+        // the calculated reward for the user
 
-        IERC20(tokenAddress).transfer(msg.sender, stakeToWithdraw.amount);
+        uint256 reward = stakeToWithdraw.reward;
 
-        // emit an event indicating that a user liquidated
+        // check if this is an early withdrawal
+
+        bool earlyWithdrawal = block.timestamp <
+            (stakeToWithdraw.timeStaked + stakeToWithdraw.duration);
+
+        if (earlyWithdrawal) {
+            reward = 0;
+        }
+
+        // add the reward to the total payout if there is any
+
+        uint256 totalPayout = stakeToWithdraw.amount + reward;
+
+        // transfer the final payout to the user
+
+        bool transferSuccess = IERC20(tokenAddress).transfer(
+            msg.sender,
+            totalPayout
+        );
+        require(transferSuccess, "Token transfer failed");
 
         emit StakeWithdrawn(msg.sender, stakeToWithdraw.amount);
     }
@@ -208,5 +250,24 @@ contract StakeMindToken {
         return userStakes[index];
     }
 
-    function calculateReward() private {}
+    /// @notice This function calculates the reward based on the staked amount and duration
+    /// @param _amount The amount of tokens staked
+    /// @param _durationDays The duration in days for which the tokens are staked
+    /// @return The calculated reward
+    function calculateReward(
+        uint256 _amount,
+        uint256 _durationDays
+    ) private pure returns (uint256) {
+        uint256 reward = 0;
+
+        if (_durationDays == 90) {
+            reward = (_amount * 5) / 100; // 5% for 3 months
+        } else if (_durationDays == 60) {
+            reward = (_amount * 1) / 100; // 1% for 2 months
+        } else if (_durationDays == 30) {
+            reward = (_amount * 5) / 10000; // 0.05% for 1 month
+        }
+
+        return reward;
+    }
 }
